@@ -5,6 +5,12 @@
 // Includes Binary Heap (with modifications) from Marijn Haverbeke.
 // http://eloquentjavascript.net/appendix2.html
 
+
+//astar.js for vorogen Tapio Kemppainen
+//MODIFIED CODE FOR VOROGEN, YOU CAN NOT USE THIS AS IS AS IT CONTAINS VOROGEN SPECIFIC CODE.
+//Can't not as in legal sense, but as in "it wont work" sense.
+//Modified to work on voronoi-like graphs
+
 (function(definition) {
     /* global module, define */
     if(typeof module === 'object' && typeof module.exports === 'object') {
@@ -15,7 +21,7 @@
         var exports = definition();
         window.astar = exports.astar;
         window.Graph = exports.Graph;
-    }
+    } 
 })(function() {
 
 function pathTo(node){
@@ -156,78 +162,38 @@ var astar = {
 
 /**
 * A graph memory structure
-* @param {Array} gridIn 2D array of input weights
+* @param {Array} gridIn 1D array of input points
 * @param {Object} [options]
-* @param {bool} [options.diagonal] Specifies whether diagonal moves are allowed
 */
 function Graph(gridIn, options) {
-    options = options || {};
+    options = options || {cost: function(){return 1;}};
     this.nodes = [];
     this.diagonal = !!options.diagonal;
     this.grid = [];
-    for (var x = 0; x < gridIn.length; x++) {
-        this.grid[x] = [];
-
-        for (var y = 0, row = gridIn[x]; y < row.length; y++) {
-            var node = new GridNode(x, y, row[y]);
-            this.grid[x][y] = node;
-            this.nodes.push(node);
-        }
+    for (var x = 0; x < gridIn.length; x++) {//TODO: !
+		var p = gridIn[x];
+		var node = new GridNode(p.x, p.y, options.cost(p.height),Object.keys(p.neighbors));
+		this.grid[x] = node;//TODO: !
+		this.nodes.push(node);
     }
 }
 
+//DONE
 Graph.prototype.neighbors = function(node) {
     var ret = [],
-        x = node.x,
-        y = node.y,
+
         grid = this.grid;
-
-    // West
-    if(grid[x-1] && grid[x-1][y]) {
-        ret.push(grid[x-1][y]);
-    }
-
-    // East
-    if(grid[x+1] && grid[x+1][y]) {
-        ret.push(grid[x+1][y]);
-    }
-
-    // South
-    if(grid[x] && grid[x][y-1]) {
-        ret.push(grid[x][y-1]);
-    }
-
-    // North
-    if(grid[x] && grid[x][y+1]) {
-        ret.push(grid[x][y+1]);
-    }
-
-    if (this.diagonal) {
-        // Southwest
-        if(grid[x-1] && grid[x-1][y-1]) {
-            ret.push(grid[x-1][y-1]);
-        }
-
-        // Southeast
-        if(grid[x+1] && grid[x+1][y-1]) {
-            ret.push(grid[x+1][y-1]);
-        }
-
-        // Northwest
-        if(grid[x-1] && grid[x-1][y+1]) {
-            ret.push(grid[x-1][y+1]);
-        }
-
-        // Northeast
-        if(grid[x+1] && grid[x+1][y+1]) {
-            ret.push(grid[x+1][y+1]);
-        }
-    }
+	
+	for(var i = 0; i < node.neighbors.length; i++){
+		var j = node.neighbors[i];
+		ret.push(this.grid[j]);
+	}
 
     return ret;
 };
-
+//DONE
 Graph.prototype.toString = function() {
+	/*
     var graphString = [],
         nodes = this.grid, // when using grid
         rowDebug, row, y, l;
@@ -240,12 +206,17 @@ Graph.prototype.toString = function() {
         graphString.push(rowDebug.join(" "));
     }
     return graphString.join("\n");
+	*/
+	return "Graph";
 };
 
-function GridNode(x, y, weight) {
+function GridNode(x, y, weight, neighbors) {
     this.x = x;
     this.y = y;
     this.weight = weight;
+	this.neighbors = [];
+	for(i in neighbors)
+		this.neighbors[i] = Number(neighbors[i]);
 }
 
 GridNode.prototype.toString = function() {

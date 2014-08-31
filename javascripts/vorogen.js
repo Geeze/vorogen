@@ -1,3 +1,4 @@
+
 //poisson-disk.js | Jeffrey Hearn | https://github.com/jeffrey-hearn/poisson-disk-sample
 //perlin.js | https://github.com/josephg/noisejs
 //astaar.js | https://github.com/bgrins/javascript-astar
@@ -6,8 +7,8 @@
 var SEALEVEL = 0;
 var BEACHLEVEL = 0.05;
 var PLAINSLEVEL = 0.15;
-var MOUNTAINLEVEL = 0.35;
-var SNOWLEVEL = 0.5;
+var MOUNTAINLEVEL = 0.45;
+var SNOWLEVEL = 0.6;
 var DEEPSEA = -0.1;
 //Biomelimits
 var POLARLIMIT = 0.5;
@@ -30,9 +31,9 @@ var perldivisors = [2, 4, 8, 16, 32, 64, 128];
 noise.seed(Math.random());
 var i, j;
 //colors of the map
-var colors = ["#006994", "#fee8d6", "#5b5", "#171", "#aaa", "#eee", "#0ea1aa"];
+var colors = ["#006994", "#fee8d6", "#5b5", "#171", "#aaa", "#bbb", "#0ea1aa"];
 var polarcolors = ["#d4f0ff", "#e0ffff", "#eee9e9", "#eeeaea", "#aaa", "#f00", "#e0ffff"];
-var desertcolors = ["#006994", "#fee8d6", "#fee8d6", "#eed8c6", "#aaa", "#eee", "#0ea1aa"];
+var desertcolors = ["#006994", "#fee8d6", "#fee8d6", "#eed8c6", "#aaa", "#bbb", "#0ea1aa"];
 var biomes = [colors,polarcolors,desertcolors];
 
 function getRandomInt(min, max) {
@@ -44,9 +45,9 @@ function rgba(r, g, b, a) {
 }
 
 //This function calculates shadow for each point. With low density map they don't look that good.
-function getShadow(x, y) {
+function getShadow(x, y, cur) {
     //Get height for asked point
-    var cur = height(x, y);
+    
     //Get height for comparison point used to calculate slope
     var compare = height(x - CELLMINDISTANCE, y - CELLMINDISTANCE);
     //var slope = (cur - up) - (cur - left);
@@ -91,6 +92,7 @@ function height(x, y) {
     var dist = Math.sqrt(Math.pow(x - SIZEX / 2, 2) + Math.pow((y - SIZEY / 2) * (SIZEX / SIZEY), 2));
     //Height is lower towards edges.
     n -= Math.max(0, Math.pow(dist / (SIZEX / 2), 2) - 0.4);
+	if(n > 0.3) n = 0.3 + (n-0.3)*2;
     return n;
 }
 //BIOMEGENERATION
@@ -126,12 +128,36 @@ for (i = 0; i < points.length; i++) {
     //attach height data to each point
     p.height = height(p.x, p.y);
     p.biome = biome(p.x, p.y, p.height);
+	p.neighbors = {};
     //Put our points to array for delaunay triangles
     delPoints[i] = [p.x,p.y];
 }
 //Calculate triangles
 var delaunay = Delaunay.triangulate(delPoints);
+function calcNeighbors(points, delaunay){
+	//Go through the triplets.
+	for(var i = 0; i < delaunay.length; i += 3){
+		for(var j = 0; j < 3; j++){
+			points[delaunay[i+j]].neighbors[delaunay[i+(j+1)%3]] = points[delaunay[i+(j+1)%3]];
+			points[delaunay[i+j]].neighbors[delaunay[i+(j+2)%3]] = points[delaunay[i+(j+2)%3]];
+		}
+	}
+}
+function getPoint(list, condition){
+	do {
+		var p = getRandomInt(0,list.length-1);
+	} while (!condition(list[p]));
+	return p;
+}
+calcNeighbors(points,delaunay);
+var pgraph = new Graph(points, {cost:function(n){return n > 0 ? 1 : 0}});
+var start = getPoint(points, function(n){return n.height > 0});
+var end = getPoint(points, function(n){return n.height > 0});
+var POINTS_HILITE = [start,end];
+start = pgraph.grid[start];
+end = pgraph.grid[end];
 
+var result = astar.search(pgraph,start,end);
 //Voronoi cells, Calculate borders of each cell
 var voronoi = new Voronoi();
 var bbox = {
@@ -152,7 +178,21 @@ var context = canvas.getContext('2d');
 
 var p; //point/cell
 var curcolor = colors;
-
+function cellToPath(context, cell){
+	//Start path (borders of cell)
+	try{
+		context.beginPath();
+		var point = cell.halfedges[0].getStartpoint();
+		context.moveTo(point.x, point.y);
+		for(j = 0; j < cell.halfedges.length; j++){
+			point = cell.halfedges[j].getEndpoint();
+			context.lineTo(point.x,point.y);
+		}
+	} catch(e) {
+		return false;
+	}
+	return true;
+}
 //Draw as polygons!
 //Loop through each cell
 for(i = 0; i < diagram.cells.length; i++){
@@ -172,21 +212,14 @@ for(i = 0; i < diagram.cells.length; i++){
     if (n < DEEPSEA) context.fillStyle = curcolor[0];
     
     context.strokeStyle = context.fillStyle;
-    //Start path (borders of cell)
-    context.beginPath();
-    var point = cell.halfedges[0].getStartpoint();
-    context.moveTo(point.x, point.y);
-    for(j = 0; j < cell.halfedges.length; j++){
-        point = cell.halfedges[j].getEndpoint();
-        context.lineTo(point.x,point.y);
-    }
-    
-    context.fill();
-    context.stroke();
+    if (cellToPath(context, cell)){    
+		context.fill();
+		context.stroke();
+	}
     //Calculate shadow and height light
     if(true){
         if(n > 0)
-            context.fillStyle = rgba(255,255,255,n);
+            context.fillStyle = rgba(255,255,255,n*0.7);
         else
             context.fillStyle = rgba(0,0,0,-n*0.2);
         context.fill();
@@ -194,7 +227,7 @@ for(i = 0; i < diagram.cells.length; i++){
         context.stroke();
         
         if(n > 0){
-            var shade = getShadow(p.x, p.y);
+            var shade = getShadow(p.x, p.y, p.height);
             
             if (shade > 0) {
                 context.fillStyle = rgba(0, 0, 90, shade*2);
@@ -221,6 +254,24 @@ if(SHOW_POINTS){
         p = points[i];
         context.fillRect(p.x*SCALE, p.y*SCALE, 2, 2);
     }
+}
+
+if(POINTS_HILITE){
+	//Draw example of neighbors
+	
+	context.fillStyle = "#f00";
+	context.strokeStyle = "#000";
+
+
+	context.fillStyle = "#ff0";
+	for(neighbor in POINTS_HILITE){
+		if(POINTS_HILITE.hasOwnProperty(neighbor)){
+			var bcell = diagram.cells[POINTS_HILITE[neighbor].voronoiId];
+			cellToPath(context, bcell);
+			context.fill();
+			context.stroke();
+		}
+	}
 }
 //Draw a grid
 
@@ -275,7 +326,15 @@ if(SHOW_DELAUNAY){
     }
 }
 
-
+var SHOW_ASTAREXAMPLE = true;
+if(SHOW_ASTAREXAMPLE && result.length){
+	context.strokeStyle = "#000";
+	context.moveTo(result[0].x,result[0].y);
+	for(i = 0; i < result.length; i++){
+		context.lineTo(result[i].x,result[i].y);
+	}
+	context.stroke();
+}
 
 
 
